@@ -26,7 +26,10 @@ def enable_logging():
 
 
 def synthesize(h_marg, p_marg, h_jd, p_jd, h_pums, p_pums,
-               marginal_zero_sub=.01, jd_zero_sub=.001, hh_index_start=0):
+               marginal_zero_sub=.01, jd_zero_sub=.001, hh_index_start=0,
+               ipf_tolerance=1e-3, ipf_max_iterations=1000,
+               ipu_tolerance=1e-4, ipu_max_iterations=20000,
+               num_draws=20):
 
     # this is the zero marginal problem
     h_marg = h_marg.replace(0, marginal_zero_sub)
@@ -46,8 +49,10 @@ def synthesize(h_marg, p_marg, h_jd, p_jd, h_pums, p_pums,
 
     # ipf for persons
     logger.info("Running ipf for persons")
-    p_constraint, _ = calculate_constraints(p_marg, p_jd.frequency)
-    # p_constraint.index = p_jd.cat_id
+    p_constraint, _ = calculate_constraints(p_marg,
+                                            p_jd.frequency,
+                                            ipf_tolerance,
+                                            ipf_max_iterations)
 
     logger.debug("Person constraint")
     logger.debug(p_constraint)
@@ -70,9 +75,11 @@ def synthesize(h_marg, p_marg, h_jd, p_jd, h_pums, p_pums,
     best_weights, fit_quality, iterations = household_weights(household_freq,
                                                               person_freq,
                                                               h_constraint,
-                                                              p_constraint)
-    logger.info("Time to run ipu: %.3fs" % (time.time()-t1))
+                                                              p_constraint,
+                                                              ipu_tolerance,
+                                                              ipu_max_iterations)
 
+    logger.info("Time to run ipu: %.3fs" % (time.time() - t1))
     logger.debug("IPU weights:")
     logger.debug(best_weights.describe())
     logger.debug("Fit quality:")
@@ -80,18 +87,26 @@ def synthesize(h_marg, p_marg, h_jd, p_jd, h_pums, p_pums,
     logger.debug("Number of iterations:")
     logger.debug(iterations)
 
+    # draw households
     num_households = int(h_marg.groupby(level=0).sum().mean())
-    print("Drawing %d households" % num_households)
+    logger.info("Drawing %d households" % num_households)
 
-    best_chisq = np.inf
-
-    return draw.draw_households(
-        num_households, h_pums, p_pums, household_freq, h_constraint,
-        p_constraint, best_weights, hh_index_start=hh_index_start)
+    return draw.draw_households(num_households,
+                                h_pums,
+                                p_pums,
+                                household_freq,
+                                h_constraint,
+                                p_constraint,
+                                best_weights,
+                                hh_index_start,
+                                num_draws)
 
 
 def synthesize_all(recipe, num_geogs=None, indexes=None,
-                   marginal_zero_sub=.01, jd_zero_sub=.001):
+                   marginal_zero_sub=.01, jd_zero_sub=.001, hh_index_start=0,
+                   ipf_tolerance=1e-3, ipf_max_iterations=1000,
+                   ipu_tolerance=1e-4, ipu_max_iterations=20000,
+                   num_draws=20):
     """
     Returns
     -------
@@ -112,7 +127,6 @@ def synthesize_all(recipe, num_geogs=None, indexes=None,
     people_list = []
     cnt = 0
     fit_quality = {}
-    hh_index_start = 0
 
     # TODO will parallelization work here?
     for geog_id in indexes:
@@ -136,10 +150,12 @@ def synthesize_all(recipe, num_geogs=None, indexes=None,
         logger.debug(p_jd)
 
         households, people, people_chisq, people_p = \
-            synthesize(
-                h_marg, p_marg, h_jd, p_jd, h_pums, p_pums,
-                marginal_zero_sub=marginal_zero_sub, jd_zero_sub=jd_zero_sub,
-                hh_index_start=hh_index_start)
+            synthesize(h_marg, p_marg,
+                       h_jd, p_jd,
+                       h_pums, p_pums,
+                       marginal_zero_sub, jd_zero_sub,
+                       ipf_tolerance, ipf_max_iterations, hh_index_start,
+                       ipu_tolerance, ipu_max_iterations, num_draws)
 
         # Append location identifiers to the synthesized households
         for geog_cat in geog_id.keys():

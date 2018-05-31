@@ -169,7 +169,7 @@ def compare_to_constraints(synth, constraints):
 
 def draw_households(
         num, h_pums, p_pums, household_freq, household_constraints,
-        person_constraints, weights, hh_index_start=0):
+        person_constraints, weights, hh_index_start=0, num_draws=20):
     """
     Draw households and persons according to weights from the IPU.
 
@@ -219,7 +219,7 @@ def draw_households(
 
     best_chisq = np.inf
 
-    for _ in range(20):
+    for _ in range(num_draws):
         indexes = _draw_indexes(num, fac, weights)
         synth_hh, synth_people = execute_draw(
             indexes, h_pums, p_pums, hh_index_start=hh_index_start)
